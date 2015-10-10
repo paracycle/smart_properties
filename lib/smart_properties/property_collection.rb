@@ -1,6 +1,13 @@
 module SmartProperties
   class PropertyCollection
     include Enumerable
+    class << (ANCHOR = Object.new)
+      def key?; false; end
+      def [](*); nil; end
+      def keys; []; end
+      def values; []; end
+      def each(&block); to_enum if block.nil?; end
+    end
 
     attr_reader :parent
 
@@ -9,73 +16,51 @@ module SmartProperties
         ancestor.ancestors.include?(SmartProperties) && ancestor != SmartProperties
       end
 
-      if parent.nil?
-        new
-      else
-        parent.properties.register(collection = new)
-        collection
-      end
+      parent.nil? ? new : new(parent.properties)
     end
 
-    def initialize
+    def initialize(parent = nil)
       @collection = {}
-      @collection_with_parent_collection = {}
-      @children = []
+      @parent = parent || ANCHOR
     end
 
     def []=(name, value)
-      name = name.to_s
-      collection[name] = value
-      collection_with_parent_collection[name] = value
-      notify_children
-      value
+      collection[name.to_s] = value
     end
 
     def [](name)
-      collection_with_parent_collection[name.to_s]
+      name = name.to_s
+      return collection[name] if collection.key?(name)
+      parent[name]
     end
 
     def key?(name)
-      collection_with_parent_collection.key?(name.to_s)
+      return true if collection.key?(name.to_s)
+      parent.key?(name)
     end
 
     def keys
-      collection_with_parent_collection.keys.map(&:to_sym)
+      parent.keys + collection.keys.map(&:to_sym)
     end
 
     def values
-      collection_with_parent_collection.values
+      parent.values + collection.values
     end
 
     def each(&block)
-      return to_enum(:each) if block.nil?
-      collection_with_parent_collection.each { |name, value| block.call([name.to_sym, value]) }
+      return to_enum if block.nil?
+
+      iterator = lambda { |(name, value)| [name.to_sym, value] }
+      parent.each(&iterator)
+      collection.each(&iterator)
     end
 
     def to_hash
-      Hash[each.to_a]
-    end
-
-    def register(child)
-      children.push(child)
-      child.refresh(collection_with_parent_collection)
-      nil
+      Hash[keys.zip(values)]
     end
 
     protected
 
-    attr_accessor :children
     attr_accessor :collection
-    attr_accessor :collection_with_parent_collection
-
-    def notify_children
-      @children.each { |child| child.refresh(collection_with_parent_collection) }
-    end
-
-    def refresh(parent_collection)
-      @collection_with_parent_collection = parent_collection.merge(collection)
-      notify_children
-      nil
-    end
   end
 end
