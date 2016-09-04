@@ -212,6 +212,7 @@ class Person
 end
 ```
 
+
 ### Constructor argument forwarding
 
 The `SmartProperties` initializer forwards anything to the super constructor
